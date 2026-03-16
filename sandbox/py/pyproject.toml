@@ -5,8 +5,8 @@ description = "Runnable Python sample for the BitGN sandbox benchmark"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "bitgn-api-connectrpc-python==0.8.1.1.20260315093845+0a99f841fd18",
-    "bitgn-api-protocolbuffers-python==34.0.0.1.20260315093845+0a99f841fd18",
+    "bitgn-api-connectrpc-python==0.8.1.1.20260316101438+5e72a3f6bebf",
+    "bitgn-api-protocolbuffers-python==34.0.0.1.20260316101438+5e72a3f6bebf",
     "openai>=2.26.0",
     "pydantic>=2.12.5",
 ]
