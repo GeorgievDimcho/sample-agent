@@ -8,6 +8,8 @@ Sample agents use SDKs that are audo-generated from the [BitGN Schema](https://b
 
 - [Sandbox Agent (Python)](sandbox/py)
 
+[![BitGN Sandbox intro](res/bitgn_sandbox_video.png)](https://www.youtube.com/watch?v=18ZWfSbTs8M)
+
 NB: If you write your own sample agent, feel free to create an issue with a link to it. We'll add it to the repo.
 
 ## References
