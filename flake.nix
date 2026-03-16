@@ -27,7 +27,7 @@
             echo "Rinat Abdullin - BitGN Samples Dev Env"
 
             export UV_PYTHON="${python}/bin/python"
-            export UV_PROJECT_ENVIRONMENT="venv"
+            export UV_PROJECT_ENVIRONMENT=".venv"
 
             # Let bash expand XDG_CACHE_HOME fallback, not Nix:
             export UV_CACHE_DIR="''${XDG_CACHE_HOME:-$HOME/.cache}/uv"
