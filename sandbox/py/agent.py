@@ -26,7 +26,7 @@ class ReportTaskCompletion(BaseModel):
     tool: Literal["report_completion"]
     completed_steps_laconic: List[str]
     answer: str
-    refs: List[str] = Field(default_factory=list)
+    grounding_refs: List[str] = Field(default_factory=list)
 
     code: Literal["completed", "failed"]
 
@@ -64,12 +64,6 @@ class Req_Delete(BaseModel):
     path: str
 
 
-class Req_Answer(BaseModel):
-    tool: Literal["answer"]
-    answer: str
-    refs: List[str] = Field(default_factory=list)
-
-
 class NextStep(BaseModel):
     current_state: str
     # we'll use only the first step, discarding all the rest.
@@ -97,7 +91,7 @@ You are a personal business assistant, helpful and precise.
  
 - always start by discovering available information by running root outline.
 - always read `AGENTS.md` at the start
-- always reference all files that contributed to the answer
+- always reference (ground) in final response all files that contributed to the answer
 - Clearly report when tasks are done
 """
 
@@ -122,7 +116,7 @@ def dispatch(vm: MiniRuntimeClientSync, cmd: BaseModel):
     if isinstance(cmd, Req_Delete):
         return vm.delete(DeleteRequest(path=cmd.path))
     if isinstance(cmd, ReportTaskCompletion):
-        return vm.answer(AnswerRequest(answer=cmd.answer, refs=cmd.refs))
+        return vm.answer(AnswerRequest(answer=cmd.answer, refs=cmd.grounding_refs))
 
 
 
@@ -195,8 +189,8 @@ def run_agent(model: str, harness_url: str, task_text: str):
 
             # print answer
             print(f"\n{CLI_BLUE}AGENT ANSWER: {job.function.answer}{CLI_CLR}")
-            if job.function.refs:
-                for ref in job.function.refs:
+            if job.function.grounding_refs:
+                for ref in job.function.grounding_refs:
                     print(f"- {CLI_BLUE}{ref}{CLI_CLR}")
             break
 
