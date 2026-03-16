@@ -31,9 +31,9 @@ class ReportTaskCompletion(BaseModel):
     code: Literal["completed", "failed"]
 
 
-class Req_Outline(BaseModel):
-    tool: Literal["outline"]
-    path: str
+class Req_Tree(BaseModel):
+    tool: Literal["tree"]
+    path: str = Field(..., description="folder path")
 
 
 class Req_Search(BaseModel):
@@ -83,7 +83,7 @@ class NextStep(BaseModel):
     # structured tool calling stays exhaustive as demo VM request types evolve.
     function: Union[
         ReportTaskCompletion,
-        Req_Outline,
+        Req_Tree,
         Req_Search,
         Req_List,
         Req_Read,
@@ -93,7 +93,7 @@ class NextStep(BaseModel):
 
 
 system_prompt = """
-You are a personal business assistant, helfpul and smart.
+You are a personal business assistant, helpful and precise.
  
 - always start by discovering available information by running root outline.
 - always read `AGENTS.md` at the start
@@ -105,10 +105,11 @@ You are a personal business assistant, helfpul and smart.
 CLI_RED = "\x1B[31m"
 CLI_GREEN = "\x1B[32m"
 CLI_CLR = "\x1B[0m"
+CLI_BLUE = "\x1B[34m"
 
 
 def dispatch(vm: MiniRuntimeClientSync, cmd: BaseModel):
-    if isinstance(cmd, Req_Outline):
+    if isinstance(cmd, Req_Tree):
         return vm.outline(OutlineRequest(path=cmd.path))
     if isinstance(cmd, Req_Search):
         return vm.search(SearchRequest(path=cmd.path, pattern=cmd.pattern, count=cmd.count))
@@ -191,6 +192,12 @@ def run_agent(model: str, harness_url: str, task_text: str):
             print(f"{CLI_GREEN}agent {job.function.code}{CLI_CLR}. Summary:")
             for s in job.function.completed_steps_laconic:
                 print(f"- {s}")
+
+            # print answer
+            print(f"\n{CLI_BLUE}AGENT ANSWER: {job.function.answer}{CLI_CLR}")
+            if job.function.refs:
+                for ref in job.function.refs:
+                    print(f"- {CLI_BLUE}{ref}{CLI_CLR}")
             break
 
         # and now we add results back to the convesation history, so that agent

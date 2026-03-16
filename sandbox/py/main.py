@@ -54,6 +54,8 @@ def main() -> None:
 
     except ConnectError as e:
         print(f"{e.code}: {e.message}")
+    except KeyboardInterrupt:
+        print(f"{CLI_RED}Interrupted{CLI_CLR}")
 
     # print scores as table
     if scores:
