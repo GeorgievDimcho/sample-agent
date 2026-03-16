@@ -60,6 +60,25 @@ wheels = [
 ]
 
 [[package]]
+name = "bitgn-sandbox-py"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "bitgn-api-connectrpc-python" },
+    { name = "bitgn-api-protocolbuffers-python" },
+    { name = "openai" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "bitgn-api-connectrpc-python", specifier = "==0.8.1.1.20260315093845+0a99f841fd18" },
+    { name = "bitgn-api-protocolbuffers-python", specifier = "==34.0.0.1.20260315093845+0a99f841fd18" },
+    { name = "openai", specifier = ">=2.26.0" },
+    { name = "pydantic", specifier = ">=2.12.5" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.2.25"
 source = { registry = "https://pypi.org/simple" }
@@ -312,25 +331,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/74/9a/0b3d77903e0bfbfb6a836050aa08ff3d6efae332ce429980146dcd15b151/pyqwest-0.4.1-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:32e313d2357624a54e60f14976bdf22e41267871b913d51ec7b41be492a0c442", size = 5542133, upload-time = "2026-03-06T02:32:27.191Z" },
     { url = "https://files.pythonhosted.org/packages/2e/3b/fcbfa0f1e8a64ebca0b28ec8f638defddbba47461d755b33658347f8ed84/pyqwest-0.4.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:284e2c99cbebb257ff84c14f14aa87f658ebe57ddfc833aa1d2fd6a3c4687a37", size = 5724980, upload-time = "2026-03-06T02:32:29.102Z" },
     { url = "https://files.pythonhosted.org/packages/2d/d8/d6710bbb38f6a715135f7c8a8e5c6227d69299a2b7e989c81315a08054e7/pyqwest-0.4.1-cp314-cp314t-win_amd64.whl", hash = "sha256:a7b8d8ae51ccf6375a9e82e5b38d2129ee3121acf4933a37e541f4fe04a5f758", size = 4577924, upload-time = "2026-03-06T02:32:31.013Z" },
-]
-
-[[package]]
-name = "python"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "bitgn-api-connectrpc-python" },
-    { name = "bitgn-api-protocolbuffers-python" },
-    { name = "openai" },
-    { name = "pydantic" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "bitgn-api-connectrpc-python", specifier = "==0.8.1.1.20260315093845+0a99f841fd18" },
-    { name = "bitgn-api-protocolbuffers-python", specifier = "==34.0.0.1.20260315093845+0a99f841fd18" },
-    { name = "openai", specifier = ">=2.26.0" },
-    { name = "pydantic", specifier = ">=2.12.5" },
 ]
 
 [[package]]
