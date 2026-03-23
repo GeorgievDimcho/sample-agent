@@ -5,11 +5,13 @@ from typing import Annotated, List, Literal, Union
 from annotated_types import Ge, Le, MaxLen, MinLen
 from bitgn.vm.pcm_connect import PcmRuntimeClientSync
 from bitgn.vm.pcm_pb2 import (
+    AnswerRequest,
     DeleteRequest,
     FindRequest,
     ListRequest,
     MkDirRequest,
     MoveRequest,
+    Outcome,
     ReadRequest,
     SearchRequest,
     TreeRequest,
@@ -26,9 +28,15 @@ from connectrpc.errors import ConnectError
 class ReportTaskCompletion(BaseModel):
     tool: Literal["report_completion"]
     completed_steps_laconic: List[str]
-    summary: str
+    message: str
     grounding_refs: List[str] = Field(default_factory=list)
-    code: Literal["completed", "blocked"]
+    outcome: Literal[
+        "OUTCOME_OK",
+        "OUTCOME_DENIED_SECURITY",
+        "OUTCOME_NONE_CLARIFICATION",
+        "OUTCOME_NONE_UNSUPPORTED",
+        "OUTCOME_ERR_INTERNAL",
+    ]
 
 
 class Req_Tree(BaseModel):
@@ -115,7 +123,7 @@ You are a pragmatic personal knowledge management assistant.
 - Always read `/AGENTS.md` or `/AGENTS.MD` early when it exists.
 - Operate through the PCM runtime file-system tools only.
 - Keep edits small and targeted.
-- When you believe the task is done or blocked, use `report_completion` with a short summary and grounding refs.
+- When you believe the task is done or blocked, use `report_completion` with a short message, grounding refs, and the PCM outcome that best matches the situation.
 - Do not invent tool results.
 """
 
@@ -125,6 +133,15 @@ CLI_GREEN = "\x1B[32m"
 CLI_CLR = "\x1B[0m"
 CLI_BLUE = "\x1B[34m"
 CLI_YELLOW = "\x1B[33m"
+
+
+OUTCOME_BY_NAME = {
+    "OUTCOME_OK": Outcome.OUTCOME_OK,
+    "OUTCOME_DENIED_SECURITY": Outcome.OUTCOME_DENIED_SECURITY,
+    "OUTCOME_NONE_CLARIFICATION": Outcome.OUTCOME_NONE_CLARIFICATION,
+    "OUTCOME_NONE_UNSUPPORTED": Outcome.OUTCOME_NONE_UNSUPPORTED,
+    "OUTCOME_ERR_INTERNAL": Outcome.OUTCOME_ERR_INTERNAL,
+}
 
 
 def dispatch(vm: PcmRuntimeClientSync, cmd: BaseModel):
@@ -154,9 +171,16 @@ def dispatch(vm: PcmRuntimeClientSync, cmd: BaseModel):
     if isinstance(cmd, Req_Move):
         return vm.move(MoveRequest(from_name=cmd.from_name, to_name=cmd.to_name))
     if isinstance(cmd, ReportTaskCompletion):
-        # AICODE-NOTE: Keep PAC1 completion local until PCM publishes a public
-        # answer/completion RPC; sandbox can dispatch completion remotely, PCM cannot.
-        return {}
+        # AICODE-NOTE: Keep the report-completion schema aligned with
+        # `bitgn.vm.pcm.AnswerRequest`: PAC1 grading consumes the recorded outcome,
+        # so the agent must choose one explicitly instead of relying on local-only status.
+        return vm.answer(
+            AnswerRequest(
+                message=cmd.message,
+                outcome=OUTCOME_BY_NAME[cmd.outcome],
+                refs=cmd.grounding_refs,
+            )
+        )
 
     raise ValueError(f"Unknown command: {cmd}")
 
@@ -214,19 +238,14 @@ def run_agent(model: str, harness_url: str, task_text: str) -> None:
             print(f"{CLI_RED}ERR {exc.code}: {exc.message}{CLI_CLR}")
 
         if isinstance(job.function, ReportTaskCompletion):
-            status = CLI_GREEN if job.function.code == "completed" else CLI_YELLOW
-            print(f"{status}agent {job.function.code}{CLI_CLR}. Summary:")
+            status = CLI_GREEN if job.function.outcome == "OUTCOME_OK" else CLI_YELLOW
+            print(f"{status}agent {job.function.outcome}{CLI_CLR}. Summary:")
             for item in job.function.completed_steps_laconic:
                 print(f"- {item}")
-            print(f"\n{CLI_BLUE}AGENT SUMMARY: {job.function.summary}{CLI_CLR}")
+            print(f"\n{CLI_BLUE}AGENT SUMMARY: {job.function.message}{CLI_CLR}")
             if job.function.grounding_refs:
                 for ref in job.function.grounding_refs:
                     print(f"- {CLI_BLUE}{ref}{CLI_CLR}")
-            print(
-                f"{CLI_YELLOW}PCM note:{CLI_CLR} the public PCM runtime does not expose "
-                "a completion RPC yet, so this sample stops locally and `EndTrial` may "
-                "still score zero until that surface lands."
-            )
             break
 
         log.append({"role": "tool", "content": txt, "tool_call_id": step})
