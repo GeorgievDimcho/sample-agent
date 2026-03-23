@@ -1,9 +1,20 @@
 import json
 import time
-from functools import lru_cache
-from typing import Annotated, Any, List, Literal, Union
+from typing import Annotated, List, Literal, Union
 
 from annotated_types import Ge, Le, MaxLen, MinLen
+from bitgn.vm.pcm_connect import PcmRuntimeClientSync
+from bitgn.vm.pcm_pb2 import (
+    DeleteRequest,
+    FindRequest,
+    ListRequest,
+    MkDirRequest,
+    MoveRequest,
+    ReadRequest,
+    SearchRequest,
+    TreeRequest,
+    WriteRequest,
+)
 from google.protobuf.json_format import MessageToDict
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -116,84 +127,35 @@ CLI_BLUE = "\x1B[34m"
 CLI_YELLOW = "\x1B[33m"
 
 
-@lru_cache(maxsize=1)
-def load_pcm_sdk() -> dict[str, Any]:
-    try:
-        from bitgn.vm.pcm_connect import PcmRuntimeClientSync
-        from bitgn.vm.pcm_pb2 import (
-            DeleteRequest,
-            FindRequest,
-            ListRequest,
-            MkDirRequest,
-            MoveRequest,
-            ReadRequest,
-            SearchRequest,
-            TreeRequest,
-            WriteRequest,
-        )
-    except ImportError as exc:
-        # AICODE-NOTE: Keep this import lazy so the sample can fail with a clear
-        # message when local Buf pins predate PCM publication instead of raising
-        # an opaque import error at startup.
-        raise RuntimeError(
-            "Installed BitGN Python SDK does not expose `bitgn.vm.pcm_*` yet. "
-            "Run `make sdk-python` from `/Users/rinat/biz/harness_core` after "
-            "pushing the latest schema digest."
-        ) from exc
-
-    return {
-        "PcmRuntimeClientSync": PcmRuntimeClientSync,
-        "DeleteRequest": DeleteRequest,
-        "FindRequest": FindRequest,
-        "ListRequest": ListRequest,
-        "MkDirRequest": MkDirRequest,
-        "MoveRequest": MoveRequest,
-        "ReadRequest": ReadRequest,
-        "SearchRequest": SearchRequest,
-        "TreeRequest": TreeRequest,
-        "WriteRequest": WriteRequest,
-    }
-
-
-def call_method(target: Any, names: list[str], request: Any) -> Any:
-    for name in names:
-        fn = getattr(target, name, None)
-        if fn is not None:
-            return fn(request)
-    raise AttributeError(f"Runtime client does not provide any of {names!r}")
-
-
-def dispatch(vm: Any, cmd: BaseModel) -> Any:
-    sdk = load_pcm_sdk()
-
+def dispatch(vm: PcmRuntimeClientSync, cmd: BaseModel):
     if isinstance(cmd, Req_Tree):
-        return call_method(vm, ["tree"], sdk["TreeRequest"](root=cmd.root))
+        return vm.tree(TreeRequest(root=cmd.root))
     if isinstance(cmd, Req_Find):
-        return call_method(
-            vm,
-            ["find"],
-            sdk["FindRequest"](
+        return vm.find(
+            FindRequest(
                 root=cmd.root,
                 name=cmd.name,
                 type={"all": 0, "files": 1, "dirs": 2}[cmd.kind],
                 limit=cmd.limit,
-            ),
+            )
         )
     if isinstance(cmd, Req_Search):
-        return call_method(vm, ["search"], sdk["SearchRequest"](root=cmd.root, pattern=cmd.pattern, limit=cmd.limit))
+        return vm.search(SearchRequest(root=cmd.root, pattern=cmd.pattern, limit=cmd.limit))
     if isinstance(cmd, Req_List):
-        return call_method(vm, ["list"], sdk["ListRequest"](name=cmd.path))
+        return vm.list(ListRequest(name=cmd.path))
     if isinstance(cmd, Req_Read):
-        return call_method(vm, ["read"], sdk["ReadRequest"](path=cmd.path))
+        return vm.read(ReadRequest(path=cmd.path))
     if isinstance(cmd, Req_Write):
-        return call_method(vm, ["write"], sdk["WriteRequest"](path=cmd.path, content=cmd.content))
+        return vm.write(WriteRequest(path=cmd.path, content=cmd.content))
     if isinstance(cmd, Req_Delete):
-        return call_method(vm, ["delete"], sdk["DeleteRequest"](path=cmd.path))
+        return vm.delete(DeleteRequest(path=cmd.path))
     if isinstance(cmd, Req_MkDir):
-        return call_method(vm, ["mk_dir", "mkdir"], sdk["MkDirRequest"](path=cmd.path))
+        return vm.mk_dir(MkDirRequest(path=cmd.path))
     if isinstance(cmd, Req_Move):
-        return call_method(vm, ["move"], sdk["MoveRequest"](from_name=cmd.from_name, to_name=cmd.to_name))
+        return vm.move(MoveRequest(from_name=cmd.from_name, to_name=cmd.to_name))
     if isinstance(cmd, ReportTaskCompletion):
+        # AICODE-NOTE: Keep PAC1 completion local until PCM publishes a public
+        # answer/completion RPC; sandbox can dispatch completion remotely, PCM cannot.
         return {}
 
     raise ValueError(f"Unknown command: {cmd}")
@@ -201,8 +163,9 @@ def dispatch(vm: Any, cmd: BaseModel) -> Any:
 
 def run_agent(model: str, harness_url: str, task_text: str) -> None:
     client = OpenAI()
-    sdk = load_pcm_sdk()
-    vm = sdk["PcmRuntimeClientSync"](harness_url)
+    # AICODE-NOTE: PAC1 now imports the PCM SDK eagerly so missing generated
+    # packages fail fast at startup instead of hiding behind the first tool call.
+    vm = PcmRuntimeClientSync(harness_url)
 
     log = [
         {"role": "system", "content": system_prompt},

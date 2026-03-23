@@ -100,23 +100,21 @@ CLI_CLR = "\x1B[0m"
 CLI_BLUE = "\x1B[34m"
 
 
-def dispatch(vm: MiniRuntimeClientSync, cmd: BaseModel):
+def dispatch(r: MiniRuntimeClientSync, cmd: BaseModel):
     if isinstance(cmd, Req_Tree):
-        return vm.outline(OutlineRequest(path=cmd.path))
+        return r.outline(OutlineRequest(path=cmd.path))
     if isinstance(cmd, Req_Search):
-        return vm.search(SearchRequest(path=cmd.path, pattern=cmd.pattern, count=cmd.count))
+        return r.search(SearchRequest(path=cmd.path, pattern=cmd.pattern, count=cmd.count))
     if isinstance(cmd, Req_List):
-        return vm.list(ListRequest(path=cmd.path))
+        return r.list(ListRequest(path=cmd.path))
     if isinstance(cmd, Req_Read):
-        return vm.read(ReadRequest(path=cmd.path))
+        return r.read(ReadRequest(path=cmd.path))
     if isinstance(cmd, Req_Write):
-        return vm.write(WriteRequest(path=cmd.path, content=cmd.content))
+        return r.write(WriteRequest(path=cmd.path, content=cmd.content))
     if isinstance(cmd, Req_Delete):
-        return vm.delete(DeleteRequest(path=cmd.path))
+        return r.delete(DeleteRequest(path=cmd.path))
     if isinstance(cmd, ReportTaskCompletion):
-        return vm.answer(AnswerRequest(answer=cmd.answer, refs=cmd.grounding_refs))
-
-
+        return r.answer(AnswerRequest(answer=cmd.answer, refs=cmd.grounding_refs))
 
     raise ValueError(f"Unknown command: {cmd}")
 
