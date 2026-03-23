@@ -19,8 +19,6 @@ from bitgn.vm.mini_pb2 import (
 )
 from connectrpc.errors import ConnectError
 
-client = OpenAI()
-
 
 class ReportTaskCompletion(BaseModel):
     tool: Literal["report_completion"]
@@ -124,6 +122,7 @@ def dispatch(vm: MiniRuntimeClientSync, cmd: BaseModel):
 
 
 def run_agent(model: str, harness_url: str, task_text: str):
+    client = OpenAI()
     vm = MiniRuntimeClientSync(harness_url)
 
     # log will contain conversation context for the agent within task

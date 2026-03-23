@@ -5,18 +5,26 @@ Runnable Python sample for the `bitgn/sandbox` benchmark. This is a sandbox, so:
 - It doesn't require BitGN Platform Key to run
 - Agent evals are not linked to your account and don't participate in the leaderboards.
 
+## Setup
 
+1. Export `OPENAI_API_KEY`
+2. Optionally export `BENCHMARK_HOST` if you are pointing at a non-default harness endpoint
+3. Run `uv sync`
 
-You will need to provide your own `OPENAI_API_KEY` (or switch OpenAI client to a provider of your choice)
+## Commands
 
-Run it with:
+- Run the full sandbox benchmark: `uv run python main.py`
+- Run a single task: `uv run python main.py t01`
+- Run a subset of tasks: `uv run python main.py t01 t03`
+- Install or update the local environment: `make sync`
+- Run the full benchmark via Make: `make run`
+- Run selected tasks via Make: `make task TASKS="t01 t03"`
 
-```bash
-uv run python main.py
-```
+You can also switch the OpenAI client to a provider of your choice if needed.
+
+## Example Output
 
 It should print something like that:
-
 
 ```
 Connecting to BitGN status: "ok"
@@ -65,6 +73,3 @@ t04: 1.00
 t05: 0.60
 FINAL: 64.00%
 ```
-
-
-Can you make it better?
