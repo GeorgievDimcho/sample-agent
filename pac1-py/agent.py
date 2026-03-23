@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 
 from connectrpc.errors import ConnectError
 
-client = OpenAI()
 
 
 class ReportTaskCompletion(BaseModel):
@@ -201,6 +200,7 @@ def dispatch(vm: Any, cmd: BaseModel) -> Any:
 
 
 def run_agent(model: str, harness_url: str, task_text: str) -> None:
+    client = OpenAI()
     sdk = load_pcm_sdk()
     vm = sdk["PcmRuntimeClientSync"](harness_url)
 
