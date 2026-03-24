@@ -131,7 +131,6 @@ class NextStep(BaseModel):
 system_prompt = """
 You are a pragmatic personal knowledge management assistant.
 
-- MUST start by exploring the repository root with `tree -L 2` and reading AGENTS.MD.
 - Keep edits small and targeted.
 - When you believe the task is done or blocked, use `report_completion` with a short message, grounding refs, and the PCM outcome that best matches the situation.
 
@@ -291,8 +290,21 @@ def run_agent(model: str, harness_url: str, task_text: str) -> None:
 
     log = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": task_text},
     ]
+
+    must = [
+        Req_Tree(level=2, tool="tree", root="/"),
+        Req_Read(path="AGENTS.md", tool="read"),
+    ]
+
+    for c in must:
+        result = dispatch(vm, c)
+        formatted = _format_result(c, result)
+        print(f"{CLI_GREEN}AUTO{CLI_CLR}: {formatted}")
+        log.append({"role": "user", "content": formatted})
+
+    # this way we cache prompt tokens for the initial context and force agent to start with grounding
+    log.append({"role": "user", "content": task_text})
 
     for i in range(30):
         step = f"step_{i + 1}"
