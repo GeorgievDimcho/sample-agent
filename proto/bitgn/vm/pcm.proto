@@ -7,6 +7,15 @@ option go_package = "bitgn.com/harness/v2/modules/pcm/internal/buf;buf";
 // Read full file contents given a path
 message ReadRequest {
   string path = 1;
+  // Prefix returned lines the same way as `cat --number`, using source file
+  // line numbers when combined with line slicing.
+  bool number = 2;
+  // 1-based inclusive start line, like `sed -n 'start,endp'`. Zero keeps the
+  // existing behavior and means "from the first line".
+  int32 start_line = 3;
+  // 1-based inclusive end line. Zero keeps the existing behavior and means
+  // "through the last line".
+  int32 end_line = 4;
 }
 
 message ReadResponse {
@@ -19,6 +28,12 @@ message ReadResponse {
 message WriteRequest {
   string path = 1;
   string content = 2;
+  // 1-based inclusive start line, like `sed -n 'start,endp'`. Zero keeps the
+  // existing whole-file overwrite behavior.
+  int32 start_line = 3;
+  // 1-based inclusive end line. Zero means "through the last line" when doing
+  // a ranged overwrite.
+  int32 end_line = 4;
 }
 message WriteResponse { }
 
