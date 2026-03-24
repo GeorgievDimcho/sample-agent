@@ -41,6 +41,7 @@ class ReportTaskCompletion(BaseModel):
 
 class Req_Tree(BaseModel):
     tool: Literal["tree"]
+    level: int = Field(2, description="max tree depth, 0 means unlimited")
     root: str = Field("", description="tree root, empty means repository root")
 
 
@@ -159,7 +160,7 @@ OUTCOME_BY_NAME = {
 
 def dispatch(vm: PcmRuntimeClientSync, cmd: BaseModel):
     if isinstance(cmd, Req_Tree):
-        return vm.tree(TreeRequest(root=cmd.root))
+        return vm.tree(TreeRequest(root=cmd.root, level=cmd.level))
     if isinstance(cmd, Req_Find):
         return vm.find(
             FindRequest(

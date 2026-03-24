@@ -72,9 +72,9 @@ message ListResponse {
 message TreeRequest {
   // May point to either a folder or a file. Empty means the workspace root.
   string root = 1;
-  // Maximum traversal depth from `root`, similar to `tree -L`. Zero means
+  // Maximum traversal level from `root`, matching `tree -L`. Zero means
   // unlimited recursion to preserve existing behavior for older clients.
-  int32 depth = 2;
+  int32 level = 2;
 }
 
 
