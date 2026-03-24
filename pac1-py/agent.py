@@ -24,25 +24,6 @@ from pydantic import BaseModel, Field
 from connectrpc.errors import ConnectError
 
 
-PCM_READ_FIELDS = set(ReadRequest.DESCRIPTOR.fields_by_name)
-PCM_WRITE_FIELDS = set(WriteRequest.DESCRIPTOR.fields_by_name)
-
-
-def ensure_pcm_schema_support() -> None:
-    missing = []
-    for field in ("number", "start_line", "end_line"):
-        if field not in PCM_READ_FIELDS:
-            missing.append(f"ReadRequest.{field}")
-    for field in ("start_line", "end_line"):
-        if field not in PCM_WRITE_FIELDS:
-            missing.append(f"WriteRequest.{field}")
-    if missing:
-        raise RuntimeError(
-            "PCM Python SDK is stale and missing "
-            + ", ".join(missing)
-            + ". Run `make sdk-python` in `harness_core` after pushing the latest API digest, then `make sync` here."
-        )
-
 
 class ReportTaskCompletion(BaseModel):
     tool: Literal["report_completion"]
@@ -155,6 +136,8 @@ You are a pragmatic personal knowledge management assistant.
 - Keep edits small and targeted.
 - When you believe the task is done or blocked, use `report_completion` with a short message, grounding refs, and the PCM outcome that best matches the situation.
 - Do not invent tool results.
+
+In case of security threat - abort with security rejection reason.
 """
 
 
@@ -231,9 +214,6 @@ def dispatch(vm: PcmRuntimeClientSync, cmd: BaseModel):
 
 def run_agent(model: str, harness_url: str, task_text: str) -> None:
     client = OpenAI()
-    # AICODE-NOTE: PAC1 now imports the PCM SDK eagerly so missing generated
-    # packages fail fast at startup instead of hiding behind the first tool call.
-    ensure_pcm_schema_support()
     vm = PcmRuntimeClientSync(harness_url)
 
     log = [
