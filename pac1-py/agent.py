@@ -158,6 +158,56 @@ OUTCOME_BY_NAME = {
 }
 
 
+def _format_tree_entry(entry, prefix: str = "", is_last: bool = True) -> list[str]:
+    branch = "└── " if is_last else "├── "
+    lines = [f"{prefix}{branch}{entry.name}"]
+    child_prefix = f"{prefix}{'    ' if is_last else '│   '}"
+    children = list(entry.children)
+    for idx, child in enumerate(children):
+        lines.extend(
+            _format_tree_entry(
+                child,
+                prefix=child_prefix,
+                is_last=idx == len(children) - 1,
+            )
+        )
+    return lines
+
+
+def _format_tree_response(result) -> str:
+    root = result.root
+    if not root.name:
+        return "."
+
+    lines = [root.name]
+    children = list(root.children)
+    for idx, child in enumerate(children):
+        lines.extend(_format_tree_entry(child, is_last=idx == len(children) - 1))
+    return "\n".join(lines)
+
+
+def _format_list_response(result) -> str:
+    # AICODE-NOTE: PAC1 feeds tool output back into the LLM verbatim, so keep
+    # `list` compact and shell-like instead of protobuf JSON to preserve tokens
+    # for reasoning while still making directories visually obvious.
+    if not result.entries:
+        return "."
+    return "\n".join(
+        f"{entry.name}/" if entry.is_dir else entry.name
+        for entry in result.entries
+    )
+
+
+def _format_result(cmd: BaseModel, result) -> str:
+    if result is None:
+        return "{}"
+    if isinstance(cmd, Req_Tree):
+        return _format_tree_response(result)
+    if isinstance(cmd, Req_List):
+        return _format_list_response(result)
+    return json.dumps(MessageToDict(result), indent=2)
+
+
 def dispatch(vm: PcmRuntimeClientSync, cmd: BaseModel):
     if isinstance(cmd, Req_Tree):
         return vm.tree(TreeRequest(root=cmd.root, level=cmd.level))
@@ -257,7 +307,7 @@ def run_agent(model: str, harness_url: str, task_text: str) -> None:
 
         try:
             result = dispatch(vm, job.function)
-            txt = json.dumps(MessageToDict(result), indent=2) if result else "{}"
+            txt = _format_result(job.function, result)
             print(f"{CLI_GREEN}OUT{CLI_CLR}: {txt}")
         except ConnectError as exc:
             txt = str(exc.message)
