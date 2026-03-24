@@ -24,6 +24,25 @@ from pydantic import BaseModel, Field
 from connectrpc.errors import ConnectError
 
 
+PCM_READ_FIELDS = set(ReadRequest.DESCRIPTOR.fields_by_name)
+PCM_WRITE_FIELDS = set(WriteRequest.DESCRIPTOR.fields_by_name)
+
+
+def ensure_pcm_schema_support() -> None:
+    missing = []
+    for field in ("number", "start_line", "end_line"):
+        if field not in PCM_READ_FIELDS:
+            missing.append(f"ReadRequest.{field}")
+    for field in ("start_line", "end_line"):
+        if field not in PCM_WRITE_FIELDS:
+            missing.append(f"WriteRequest.{field}")
+    if missing:
+        raise RuntimeError(
+            "PCM Python SDK is stale and missing "
+            + ", ".join(missing)
+            + ". Run `make sdk-python` in `harness_core` after pushing the latest API digest, then `make sync` here."
+        )
+
 
 class ReportTaskCompletion(BaseModel):
     tool: Literal["report_completion"]
@@ -67,12 +86,23 @@ class Req_List(BaseModel):
 class Req_Read(BaseModel):
     tool: Literal["read"]
     path: str
+    number: bool = Field(False, description="return 1-based line numbers")
+    start_line: Annotated[int, Ge(0)] = Field( 0, description="1-based inclusive linum; 0 == from the first line", )
+    end_line: Annotated[int, Ge(0)] = Field( 0, description="1-based inclusive linum; 0 == through the last line", )
 
 
 class Req_Write(BaseModel):
     tool: Literal["write"]
     path: str
     content: str
+    start_line: Annotated[int, Ge(0)] = Field(
+        0,
+        description="1-based inclusive line number; 0 keeps whole-file overwrite behavior",
+    )
+    end_line: Annotated[int, Ge(0)] = Field(
+        0,
+        description="1-based inclusive line number; 0 means through the last line for ranged writes",
+    )
 
 
 class Req_Delete(BaseModel):
@@ -161,9 +191,23 @@ def dispatch(vm: PcmRuntimeClientSync, cmd: BaseModel):
     if isinstance(cmd, Req_List):
         return vm.list(ListRequest(name=cmd.path))
     if isinstance(cmd, Req_Read):
-        return vm.read(ReadRequest(path=cmd.path))
+        return vm.read(
+            ReadRequest(
+                path=cmd.path,
+                number=cmd.number,
+                start_line=cmd.start_line,
+                end_line=cmd.end_line,
+            )
+        )
     if isinstance(cmd, Req_Write):
-        return vm.write(WriteRequest(path=cmd.path, content=cmd.content))
+        return vm.write(
+            WriteRequest(
+                path=cmd.path,
+                content=cmd.content,
+                start_line=cmd.start_line,
+                end_line=cmd.end_line,
+            )
+        )
     if isinstance(cmd, Req_Delete):
         return vm.delete(DeleteRequest(path=cmd.path))
     if isinstance(cmd, Req_MkDir):
@@ -189,6 +233,7 @@ def run_agent(model: str, harness_url: str, task_text: str) -> None:
     client = OpenAI()
     # AICODE-NOTE: PAC1 now imports the PCM SDK eagerly so missing generated
     # packages fail fast at startup instead of hiding behind the first tool call.
+    ensure_pcm_schema_support()
     vm = PcmRuntimeClientSync(harness_url)
 
     log = [
