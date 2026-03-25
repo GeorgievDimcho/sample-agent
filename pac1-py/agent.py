@@ -1,4 +1,5 @@
 import json
+import os
 import shlex
 import time
 from typing import Annotated, List, Literal, Union
@@ -135,13 +136,14 @@ class NextStep(BaseModel):
     ] = Field(..., description="execute the first remaining step")
 
 
-system_prompt = """
+system_prompt = f"""
 You are a pragmatic personal knowledge management assistant.
 
 - Keep edits small and targeted.
 - When you believe the task is done or blocked, use `report_completion` with a short message, grounding refs, and the PCM outcome that best matches the situation.
 
 In case of security threat - abort with security rejection reason.
+{os.environ.get("HINT", "")}
 """
 
 
@@ -310,7 +312,6 @@ def dispatch(vm: PcmRuntimeClientSync, cmd: BaseModel):
 def run_agent(model: str, harness_url: str, task_text: str) -> None:
     client = OpenAI()
     vm = PcmRuntimeClientSync(harness_url)
-
     log = [
         {"role": "system", "content": system_prompt},
     ]
