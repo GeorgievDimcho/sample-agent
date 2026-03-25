@@ -1,4 +1,5 @@
 import json
+import shlex
 import time
 from typing import Annotated, List, Literal, Union
 
@@ -223,6 +224,18 @@ def _format_read_response(cmd: Req_Read, result) -> str:
     return _render_command(command, result.content)
 
 
+def _format_search_response(cmd: Req_Search, result) -> str:
+    # AICODE-NOTE: Keep PCM search output in `rg -n --no-heading` shape so the
+    # LLM sees the familiar `path:line:text` contract instead of protobuf JSON.
+    root = shlex.quote(cmd.root or "/")
+    pattern = shlex.quote(cmd.pattern)
+    body = "\n".join(
+        f"{match.path}:{match.line}:{match.line_text}"
+        for match in result.matches
+    )
+    return _render_command(f"rg -n --no-heading -e {pattern} {root}", body)
+
+
 def _format_result(cmd: BaseModel, result) -> str:
     if result is None:
         return "{}"
@@ -232,6 +245,8 @@ def _format_result(cmd: BaseModel, result) -> str:
         return _format_list_response(cmd, result)
     if isinstance(cmd, Req_Read):
         return _format_read_response(cmd, result)
+    if isinstance(cmd, Req_Search):
+        return _format_search_response(cmd, result)
     return json.dumps(MessageToDict(result), indent=2)
 
 
