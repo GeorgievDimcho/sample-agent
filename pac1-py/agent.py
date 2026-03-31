@@ -318,7 +318,7 @@ def run_agent(model: str, harness_url: str, task_text: str) -> None:
 
     must = [
         Req_Tree(level=2, tool="tree", root="/"),
-        Req_Read(path="AGENTS.md", tool="read"),
+        Req_Read(path="AGENTS.MD", tool="read"),
         Req_Context(tool="context"),
     ]
 
