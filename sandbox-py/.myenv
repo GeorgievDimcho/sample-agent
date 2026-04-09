@@ -1,0 +1,6 @@
+# Local test credentials for sandbox-py
+OPENAI_API_KEY=c3Qb6Js8Vd1w
+OPENAI_BASE_URL=http://hackathon-proxy.westeurope.azurecontainer.io:3000/v1
+
+# Optional override; default is already https://api.bitgn.com
+BENCHMARK_HOST=https://api.bitgn.com
