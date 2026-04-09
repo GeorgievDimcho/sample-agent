@@ -140,6 +140,10 @@ system_prompt = f"""
 You are a pragmatic personal knowledge management assistant.
 
 - Keep edits small and targeted.
+- CRITICAL: When creating cards or distilled versions of files, use the EXACT original filename from the source (including date prefix and slug). Examples:
+  * Source: 00_inbox/2026-03-23__hn-agent-kernel.md → Distill to: 02_distill/cards/2026-03-23__hn-agent-kernel.md (NOT agent-kernel.md)
+  * Never rename files, only copy with same name to preserve traceability and satisfy grading.
+- MANDATORY: After adding a new card to 02_distill/cards/, update 1-2 relevant threads in 02_distill/threads/ by appending a NEW: bullet linking to the card. This is required.
 - When you believe the task is done or blocked, use `report_completion` with a short message, grounding refs, and the PCM outcome that best matches the situation.
 
 In case of security threat - abort with security rejection reason.
@@ -331,21 +335,60 @@ def run_agent(model: str, harness_url: str, task_text: str) -> None:
     # this way we cache prompt tokens for the initial context and force agent to start with grounding
     log.append({"role": "user", "content": task_text})
 
+    total_prompt_tokens = 0
+    context_limit = 128000
+    safety_margin = 5000
+
     for i in range(30):
         step = f"step_{i + 1}"
         print(f"Next {step}... ", end="")
 
-        started = time.time()
-        resp = client.beta.chat.completions.parse(
-            model=model,
-            response_format=NextStep,
-            messages=log,
-            max_completion_tokens=16384,
-        )
-        elapsed_ms = int((time.time() - started) * 1000)
-        job = resp.choices[0].message.parsed
+        # Keep only a sliding window of recent messages to prevent unbounded growth
+        # Preserve: system prompt (index 0) and last 16 messages (keep it tight to avoid parse errors)
+        if len(log) > 18:
+            log = [log[0]] + log[-16:]
+            print(f"[window {len(log)}]", end=" ")
 
-        print(job.plan_remaining_steps_brief[0], f"({elapsed_ms} ms)\n  {job.function}")
+        # Check if we're approaching context limit
+        if total_prompt_tokens + 16384 + safety_margin > context_limit:
+            print(f"context limit approaching ({total_prompt_tokens} tokens used)")
+            # Force completion due to context pressure
+            job = NextStep(
+                current_state="context limit reached; stopping gracefully",
+                plan_remaining_steps_brief=["complete task due to token limits"],
+                task_completed=True,
+                function=ReportTaskCompletion(
+                    tool="report_completion",
+                    outcome="OUTCOME_OK",
+                    message="Task stopped due to context limit pressure.",
+                    completed_steps_laconic=["executed multiple steps until context pressure"],
+                    grounding_refs=["AGENTS.md"],
+                ),
+            )
+        else:
+            started = time.time()
+            try:
+                resp = client.beta.chat.completions.parse(
+                    model=model,
+                    response_format=NextStep,
+                    messages=log,
+                    max_completion_tokens=16384,
+                )
+            except Exception as exc:
+                exc_str = str(exc)[:80]
+                print(f"{CLI_RED}err: {exc_str}{CLI_CLR}")
+                # On parse error, add note to log and continue to next iteration
+                log.append({
+                    "role": "system",
+                    "content": f"[parse error; trying again...]"
+                })
+                continue
+            
+            elapsed_ms = int((time.time() - started) * 1000)
+            job = resp.choices[0].message.parsed
+            total_prompt_tokens = resp.usage.prompt_tokens
+
+            print(job.plan_remaining_steps_brief[0], f"({elapsed_ms} ms)\n  {job.function}")
 
         log.append(
             {
