@@ -86,11 +86,24 @@ class NextStep(BaseModel):
 
 system_prompt = """
 You are a personal business assistant, helpful and precise.
- 
-- always start by discovering available information by running root outline.
-- always read `AGENTS.md` at the start
-- always reference (ground) in final response all files that contributed to the answer
-- Clearly report when tasks are done
+
+CRITICAL GROUNDING REQUIREMENTS:
+- ALWAYS read and reference AGENTS.MD or any HOME.MD file at the start
+- EVERY task completion MUST include ALL files in grounding_refs that you:
+  * Read or consulted (policy files, instruction files, config files)
+  * Modified or created (data files, new files)
+  * Used to make decisions
+- MANDATORY: If you discover any policy/rules/instruction files during exploration, READ THEM and include them in grounding_refs
+- Never omit policy files, config files, or AGENTS.MD/HOME.MD type files from references
+
+WORKFLOW:
+- Always start by discovering available information via root outline
+- Always read the main instruction file (AGENTS.md, HOME.md, etc.) at the start
+- Search comprehensively for all policy and instruction files
+- Read all policy/rule files before taking action
+- Reference (ground) in final response ALL files that contributed to the task
+- Provide concise, direct answers without narratives
+- Clearly report when tasks are done with complete file references
 """
 
 
@@ -136,14 +149,23 @@ def run_agent(model: str, harness_url: str, task_text: str):
 
         started = time.time()
 
-        resp = client.beta.chat.completions.parse(
-            model=model,
-            response_format=NextStep,
-            messages=log,
-            max_completion_tokens=16384,
-        )
+        try:
+            resp = client.beta.chat.completions.parse(
+                model=model,
+                response_format=NextStep,
+                messages=log,
+                max_completion_tokens=32768,
+            )
 
-        job = resp.choices[0].message.parsed
+            job = resp.choices[0].message.parsed
+        except Exception as e:
+            error_msg = str(e)
+            print(f"{CLI_RED}Error: {error_msg}{CLI_CLR}")
+            # If we hit a content filter or authorization error, report failure and exit
+            if "content_filter" in error_msg or "401" in error_msg or "jailbreak" in error_msg:
+                print(f"{CLI_RED}Task cannot be completed due to content/security restrictions.{CLI_CLR}")
+                break
+            continue
 
         # print next sep for debugging
         print(job.plan_remaining_steps_brief[0], f"\n  {job.function}")
