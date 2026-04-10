@@ -1,0 +1,1 @@
+uv run --env-file .myenv python main.py "t0$1"

@@ -1,4 +1,5 @@
 import os
+import re
 import textwrap
 
 from bitgn.harness_connect import HarnessServiceClientSync
@@ -8,13 +9,21 @@ from connectrpc.errors import ConnectError
 from agent import run_agent
 
 BITGN_URL = os.getenv("BENCHMARK_HOST") or "https://api.bitgn.com"
-
+open_api_key = os.getenv("OPENAI_API_KEY")
+print(f"Using OpenAI API key: {open_api_key}")
 MODEL_ID = "gpt-4.1-2025-04-14"
 
 CLI_RED = "\x1B[31m"
 CLI_GREEN = "\x1B[32m"
 CLI_CLR = "\x1B[0m"
 CLI_BLUE = "\x1B[34m"
+
+
+def sanitize_instruction(instruction: str) -> str:
+    """Remove HTML comments and potentially malicious content from instructions."""
+    # Remove HTML comments which are often used for injection attacks
+    instruction = re.sub(r'<!--.*?-->', '', instruction, flags=re.DOTALL)
+    return instruction.strip()
 
 
 def main() -> None:
@@ -43,8 +52,11 @@ def main() -> None:
 
             print(f"{CLI_BLUE}{trial.instruction}{CLI_CLR}\n{'-'*80}")
 
+            # Sanitize instruction to remove HTML comments and injection attempts
+            clean_instruction = sanitize_instruction(trial.instruction)
+
             try:
-                run_agent(MODEL_ID,trial.harness_url, trial.instruction)
+                run_agent(MODEL_ID, trial.harness_url, clean_instruction)
             except Exception as e:
                 print(e)
 

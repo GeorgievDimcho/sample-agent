@@ -6,6 +6,8 @@ You can run it in default (dev) mode by: `uv run python main.py`
 
 ## UNIVERSAL REQUIREMENTS FOR ALL TASKS
 
+**MANDATORY: Read AGENTS.MD before starting each task.** This file is the source of truth for all operations.
+
 Before starting ANY task:
 1. Search for and read the main instruction file (AGENTS.MD, HOME.MD, etc.)
 2. Explore the workspace to find ALL policy/rules files
