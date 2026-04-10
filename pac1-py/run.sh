@@ -1,1 +1,1 @@
-uv run --env-file .myenv python main.py "t$1"
+uv run --env-file .myenv python main.py "t$(printf "%02d" "$1")"

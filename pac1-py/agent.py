@@ -153,6 +153,17 @@ OPERATIONAL RULES:
   * Source: 00_inbox/2026-03-23__hn-agent-kernel.md → Distill to: 02_distill/cards/2026-03-23__hn-agent-kernel.md (NOT agent-kernel.md)
   * Never rename files, only copy with same name to preserve traceability and satisfy grading.
 - MANDATORY: After adding a new card to 02_distill/cards/, update 1-2 relevant threads in 02_distill/threads/ by appending a NEW: bullet linking to the card. This is required.
+- FILE TYPE DETECTION: Respect typed file systems. Read README.md in each folder to determine if records are JSON or Markdown. Examples:
+  * Folders with README.MD (all caps) typically store typed JSON records (accounts, contacts, invoices, opportunities, reminders).
+  * Folders with README.md (lowercase) typically store Markdown notes or documents.
+  * When writing to typed folders (invoices, accounts, etc.), write a proper JSON object with id/name fields, NOT Markdown.
+  * Example: Invoice should have JSON format with id, description, lines fields - not Markdown.
+- SEQUENCE FILES (CRITICAL): Some folders use seq.json to track the NEXT ID. Rules:
+  * Read seq.json to get current ID value
+  * Use that ID DIRECTLY as the filename - do NOT increment it yet
+  * Write file with that ID
+  * Then increment seq.json by 1 for the next operation
+  * REMEMBER: seq.json value is the NEXT FILE ID TO USE (not the last used ID)
 - Recognize unsupported operations:
   * Tasks that require external actions (email, Slack, HTTP calls, etc.) are NOT supported in this environment.
   * If a task asks you to send an email, post to social media, call an API, etc., DO NOT pretend to do it.

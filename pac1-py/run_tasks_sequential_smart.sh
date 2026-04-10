@@ -4,13 +4,24 @@
 # - Stops on first failure and waits for fix
 # - 15-second idle timeout detection (API instability)
 # - Auto-restart hung tasks
-
-set -e
+# - Background execution with nohup support
 
 TASK_START=${1:-4}
 TASK_END=${2:-40}
 SCRIPT="./run.sh"
 IDLE_TIMEOUT=15  # seconds
+
+# Check if running in background mode (NOHUP_MODE env var set)
+# If not, re-invoke ourselves with nohup and exit
+if [ -z "$NOHUP_MODE" ]; then
+    cd /home/glo/Documents/code/python/sample-agents/pac1-py
+    NOHUP_MODE=1 nohup "$0" "$TASK_START" "$TASK_END" > "/tmp/tasks_${TASK_START}_${TASK_END}.log" 2>&1 &
+    echo "Tasks $TASK_START-$TASK_END running in background, PID: $!"
+    sleep 5
+    exit 0
+fi
+
+set -e
 
 echo "Starting smart sequential PAC1 task runner: tasks $TASK_START to $TASK_END"
 echo "Idle timeout: ${IDLE_TIMEOUT}s (restarts hung tasks)"
@@ -21,8 +32,6 @@ run_task_with_timeout() {
     local TMPFILE=$(mktemp)
     local LASTLINE_TIME=$(date +%s)
     local LASTLINE_LEN=0
-    
-    echo "Running task $TASK..." > "$TMPFILE"
     
     # Start task in background
     $SCRIPT $TASK > "$TMPFILE" 2>&1 &
@@ -53,11 +62,10 @@ run_task_with_timeout() {
     done
     
     wait $PID
-    local EXIT_CODE=$?
     
     cat "$TMPFILE"
     rm "$TMPFILE"
-    return $EXIT_CODE
+    return 0
 }
 
 for TASK in $(seq $TASK_START $TASK_END); do
@@ -66,39 +74,34 @@ for TASK in $(seq $TASK_START $TASK_END); do
     echo "---"
     
     # Run with timeout wrapper
-    OUTPUT=$(run_task_with_timeout $TASK 2>&1) || {
-        EXIT_CODE=$?
-        if [ $EXIT_CODE -eq 2 ]; then
-            echo ""
-            echo "✗ HUNG/TIMEOUT - Restarting task $TASK..."
-            echo "---"
-            OUTPUT=$(run_task_with_timeout $TASK 2>&1) || {
-                EXIT_CODE=$?
-                echo ""
-                echo "✗ Task $TASK FAILED after retry (exit code: $EXIT_CODE)"
-                echo "STOPPING. Fix and re-run: $SCRIPT $TASK"
-                exit 1
-            }
-        else
-            echo ""
-            echo "✗ Task $TASK FAILED (exit code: $EXIT_CODE)"
-            echo "STOPPING. Fix and re-run: $SCRIPT $TASK"
-            exit 1
-        fi
-    }
+    OUTPUT=$(run_task_with_timeout $TASK 2>&1)
+    HANDLER_CODE=$?
     
-    # Check output for success
-    if echo "$OUTPUT" | grep -q "FINAL: 100.0%" && echo "$OUTPUT" | grep -q "Score: 1.00"; then
+    if [ $HANDLER_CODE -eq 2 ]; then
+        # Task hung/timeout - retry once
+        echo ""
+        echo "[TIMEOUT] Task $TASK hung, retrying..."
+        OUTPUT=$(run_task_with_timeout $TASK 2>&1)
+        HANDLER_CODE=$?
+    fi
+    
+    # Print output
+    echo "$OUTPUT"
+    
+    # Check for success: both "Score: 1.00" and "FINAL: 100" somewhere in output
+    if echo "$OUTPUT" | grep -q "Score: 1.00" && echo "$OUTPUT" | grep -q "FINAL: 100"; then
+        echo ""
         echo "✓ Task $TASK PASSED"
     else
-        # Extract error details
+        # Extract error for debugging
         echo ""
-        echo "✗ Task $TASK FAILED or had errors"
+        echo "✗ Task $TASK FAILED"
         echo ""
-        echo "Error details (last 20 lines):"
-        echo "$OUTPUT" | tail -20
+        echo "Extracting error lines..."
+        echo "$OUTPUT" | grep -iE "missing|expected|error|fail|denied" | head -10 || echo "(no error keywords found)"
         echo ""
-        echo "STOPPING. Fix the agent and re-run: $SCRIPT $TASK"
+        echo "STOPPING. Review error above."
+        echo "To debug: ./run.sh $TASK"
         exit 1
     fi
 done
