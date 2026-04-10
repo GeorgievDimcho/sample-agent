@@ -1,3 +1,12 @@
+# Note from Dimcho
+
+I am merging this. sandbox-py has 7 tasks. All should run successful
+In Pac1 there are 43 tasks, task 1 - task 22 (without task 19) should run. As far as i know the only important changes the did were inside the system_prompt variable in line 139 in agent.py - the System prompt = "Agent behavioral rules" (universal), and in the file AGENTS.MD . [AGENTS.MD]= "Task instructions" (scenario-specific, fed by grader) They're complementary, not replacements.
+Every task has local files on their server like extra infos and there is also an AGENTS.MD which we cannot edit. (the authors of the hackathon said: "there is not prompt injection in the AGENTS.MD YET") I find that suspicious.
+I think if you run the tasks one by one and paste the errors in the co-pilot it will append the system prompt or AGENTS.MD and the task will work.
+at 1 pm we will receive new secret tasks which our agents has to solve. I suspect they will try to have a prompt injection inside the final tasks to make out agent fail the task and we will have to develop a solution until 3 pm.
+
+
 # BitGN Platform Samples
 
 This repository contains sample agents for the [BitGN Platform](https://bitgn.com). The sample agents use SDKs that are auto-generated from the [BitGN Schema](https://buf.build/bitgn/api), which is stored in the [proto/](proto/) folder.
