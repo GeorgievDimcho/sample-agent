@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import re
 import shlex
 import time
@@ -24,7 +25,7 @@ from bitgn.vm.pcm_pb2 import (
     WriteRequest,
 )
 from google.protobuf.json_format import MessageToDict
-from openai import OpenAI
+from openai import APIStatusError, OpenAI, RateLimitError
 from pydantic import BaseModel, Field
 
 from connectrpc.errors import ConnectError
@@ -300,6 +301,11 @@ CLI_BLUE = "\x1B[34m"
 CLI_YELLOW = "\x1B[33m"
 
 
+LLM_MAX_COMPLETION_TOKENS = int(os.environ.get("LLM_MAX_COMPLETION_TOKENS", "3072"))
+LLM_MAX_RATE_LIMIT_RETRIES = int(os.environ.get("LLM_MAX_RATE_LIMIT_RETRIES", "4"))
+LLM_MAX_RATE_LIMIT_DELAY_SECONDS = float(os.environ.get("LLM_MAX_RATE_LIMIT_DELAY_SECONDS", "30"))
+
+
 OUTCOME_BY_NAME = {
     "OUTCOME_OK": Outcome.OUTCOME_OK,
     "OUTCOME_DENIED_SECURITY": Outcome.OUTCOME_DENIED_SECURITY,
@@ -307,6 +313,38 @@ OUTCOME_BY_NAME = {
     "OUTCOME_NONE_UNSUPPORTED": Outcome.OUTCOME_NONE_UNSUPPORTED,
     "OUTCOME_ERR_INTERNAL": Outcome.OUTCOME_ERR_INTERNAL,
 }
+
+
+def _retry_after_seconds(exc: APIStatusError) -> float | None:
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None
+
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+
+    retry_after = headers.get("retry-after")
+    if not retry_after:
+        return None
+
+    try:
+        value = float(retry_after)
+    except ValueError:
+        return None
+
+    if value < 0:
+        return 0.0
+    return min(value, LLM_MAX_RATE_LIMIT_DELAY_SECONDS)
+
+
+def _rate_limit_backoff_seconds(attempt: int, retry_after: float | None) -> float:
+    # Add jitter so repeated retry bursts are less likely to synchronize.
+    exp_delay = min(LLM_MAX_RATE_LIMIT_DELAY_SECONDS, 2 ** attempt)
+    delay = exp_delay + random.uniform(0.0, 0.5)
+    if retry_after is not None:
+        delay = max(delay, retry_after)
+    return min(delay, LLM_MAX_RATE_LIMIT_DELAY_SECONDS)
 
 
 def _format_tree_entry(entry, prefix: str = "", is_last: bool = True) -> list[str]:
@@ -1935,26 +1973,80 @@ def run_agent(model: str, harness_url: str, task_text: str) -> None:
             )
         else:
             started = time.time()
-            try:
-                resp = client.beta.chat.completions.parse(
-                    model=model,
-                    response_format=NextStep,
-                    messages=log,
-                    max_completion_tokens=4096,
-                )
-            except Exception as exc:
-                exc_str = str(exc)[:80]
-                print(f"{CLI_RED}err: {exc_str}{CLI_CLR}")
-                # On parse error, aggressively trim context and retry with a
-                # compact instruction using a supported role.
-                if len(log) > 12:
-                    log = [log[0]] + log[-10:]
-                log.append(
-                    {
-                        "role": "user",
-                        "content": "Previous response was truncated. Return valid compact JSON only.",
-                    }
-                )
+            resp = None
+            rate_limit_retries = 0
+            while True:
+                try:
+                    resp = client.beta.chat.completions.parse(
+                        model=model,
+                        response_format=NextStep,
+                        messages=log,
+                        max_completion_tokens=LLM_MAX_COMPLETION_TOKENS,
+                    )
+                    break
+                except RateLimitError as exc:
+                    if rate_limit_retries >= LLM_MAX_RATE_LIMIT_RETRIES:
+                        exc_str = str(exc)[:80]
+                        print(f"{CLI_RED}err: {exc_str}{CLI_CLR}")
+                        # Keep rate-limit failures distinct from parse failures;
+                        # don't inject truncated-response hints for 429s.
+                        break
+
+                    retry_after = _retry_after_seconds(exc)
+                    sleep_seconds = _rate_limit_backoff_seconds(rate_limit_retries, retry_after)
+                    rate_limit_retries += 1
+                    print(
+                        f"{CLI_YELLOW}429 rate limited; retry {rate_limit_retries}/"
+                        f"{LLM_MAX_RATE_LIMIT_RETRIES} in {sleep_seconds:.1f}s{CLI_CLR}"
+                    )
+                    time.sleep(sleep_seconds)
+                    continue
+                except APIStatusError as exc:
+                    if exc.status_code != 429:
+                        exc_str = str(exc)[:80]
+                        print(f"{CLI_RED}err: {exc_str}{CLI_CLR}")
+                        # On parse/runtime errors, aggressively trim context and
+                        # ask for compact JSON.
+                        if len(log) > 12:
+                            log = [log[0]] + log[-10:]
+                        log.append(
+                            {
+                                "role": "user",
+                                "content": "Previous response was truncated. Return valid compact JSON only.",
+                            }
+                        )
+                        break
+
+                    if rate_limit_retries >= LLM_MAX_RATE_LIMIT_RETRIES:
+                        exc_str = str(exc)[:80]
+                        print(f"{CLI_RED}err: {exc_str}{CLI_CLR}")
+                        break
+
+                    retry_after = _retry_after_seconds(exc)
+                    sleep_seconds = _rate_limit_backoff_seconds(rate_limit_retries, retry_after)
+                    rate_limit_retries += 1
+                    print(
+                        f"{CLI_YELLOW}429 rate limited; retry {rate_limit_retries}/"
+                        f"{LLM_MAX_RATE_LIMIT_RETRIES} in {sleep_seconds:.1f}s{CLI_CLR}"
+                    )
+                    time.sleep(sleep_seconds)
+                    continue
+                except Exception as exc:
+                    exc_str = str(exc)[:80]
+                    print(f"{CLI_RED}err: {exc_str}{CLI_CLR}")
+                    # On parse error, aggressively trim context and retry with a
+                    # compact instruction using a supported role.
+                    if len(log) > 12:
+                        log = [log[0]] + log[-10:]
+                    log.append(
+                        {
+                            "role": "user",
+                            "content": "Previous response was truncated. Return valid compact JSON only.",
+                        }
+                    )
+                    break
+
+            if resp is None:
                 continue
             
             elapsed_ms = int((time.time() - started) * 1000)
