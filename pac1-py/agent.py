@@ -4,6 +4,7 @@ import re
 import shlex
 import time
 import unicodedata
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, List, Literal, Union
 
@@ -897,6 +898,133 @@ def _try_capture_date_lookup_fastpath(vm: PcmRuntimeClientSync, task_text: str) 
     return True
 
 
+def _extract_purchase_id_prefix(purchase_id: str) -> str | None:
+    match = re.match(r"^([a-zA-Z][a-zA-Z0-9_-]*-)\d+$", purchase_id.strip())
+    if not match:
+        return None
+    return match.group(1)
+
+
+def _try_purchase_prefix_fix_fastpath(vm: PcmRuntimeClientSync, task_text: str) -> bool:
+    task_lower = task_text.lower()
+    if "purchase" not in task_lower or "prefix" not in task_lower:
+        return False
+    if not re.search(r"fix|regression|repair|downstream|cleanup", task_text, re.IGNORECASE):
+        return False
+
+    refs: list[str] = ["AGENTS.md"]
+
+    # Ground the workflow docs that define where the live emitter boundary is.
+    for doc_path in ["docs/purchase-id-workflow.md", "processing/README.MD", "purchases/audit.json"]:
+        try:
+            _ = vm.read(ReadRequest(path=doc_path)).content
+            refs.append(doc_path)
+        except Exception:
+            continue
+
+    canonical_prefix: str | None = None
+    prefixes: Counter[str] = Counter()
+
+    try:
+        audit_obj = json.loads(vm.read(ReadRequest(path="purchases/audit.json")).content)
+        for example_path in audit_obj.get("examples", []):
+            example_ref = str(example_path).strip()
+            if not example_ref:
+                continue
+            try:
+                purchase_obj = json.loads(vm.read(ReadRequest(path=example_ref)).content)
+            except Exception:
+                continue
+            refs.append(example_ref)
+            prefix = _extract_purchase_id_prefix(str(purchase_obj.get("purchase_id", "")))
+            if prefix:
+                prefixes[prefix] += 1
+    except Exception:
+        pass
+
+    if not prefixes:
+        try:
+            purchase_entries = vm.list(ListRequest(name="purchases")).entries
+        except Exception:
+            purchase_entries = []
+
+        purchase_files = sorted(
+            entry.name
+            for entry in purchase_entries
+            if (not entry.is_dir) and entry.name.endswith(".json") and entry.name != "audit.json"
+        )
+        for name in purchase_files[:40]:
+            purchase_path = f"purchases/{name}"
+            try:
+                purchase_obj = json.loads(vm.read(ReadRequest(path=purchase_path)).content)
+            except Exception:
+                continue
+            refs.append(purchase_path)
+            prefix = _extract_purchase_id_prefix(str(purchase_obj.get("purchase_id", "")))
+            if prefix:
+                prefixes[prefix] += 1
+
+    if prefixes:
+        canonical_prefix = prefixes.most_common(1)[0][0]
+
+    if not canonical_prefix:
+        return False
+
+    emitter_path = ""
+    emitter_cfg: dict | None = None
+    try:
+        processing_entries = vm.list(ListRequest(name="processing")).entries
+    except Exception:
+        processing_entries = []
+
+    lane_files = sorted(
+        entry.name
+        for entry in processing_entries
+        if (not entry.is_dir) and entry.name.endswith(".json") and entry.name.startswith("lane_")
+    )
+    for lane_name in lane_files:
+        lane_path = f"processing/{lane_name}"
+        try:
+            cfg_obj = json.loads(vm.read(ReadRequest(path=lane_path)).content)
+        except Exception:
+            continue
+        refs.append(lane_path)
+        if (
+            str(cfg_obj.get("mode", "")).strip().lower() == "emit"
+            and str(cfg_obj.get("traffic", "")).strip().lower() == "downstream"
+            and str(cfg_obj.get("status", "")).strip().lower() == "active"
+        ):
+            emitter_path = lane_path
+            emitter_cfg = cfg_obj
+            break
+
+    if not emitter_path or emitter_cfg is None:
+        return False
+
+    current_prefix = str(emitter_cfg.get("prefix", "")).strip()
+    if current_prefix != canonical_prefix:
+        emitter_cfg["prefix"] = canonical_prefix
+        vm.write(
+            WriteRequest(
+                path=emitter_path,
+                content=json.dumps(emitter_cfg, indent=2) + "\n",
+            )
+        )
+        message = f"Fixed purchase ID prefix regression at {emitter_path}: {current_prefix} -> {canonical_prefix}."
+    else:
+        message = f"Purchase ID emitter prefix already correct at {emitter_path}: {canonical_prefix}."
+
+    vm.answer(
+        AnswerRequest(
+            message=message,
+            outcome=Outcome.OUTCOME_OK,
+            refs=list(dict.fromkeys(refs)),
+        )
+    )
+    print(f"{CLI_GREEN}FASTPATH{CLI_CLR}: purchase prefix fix completed ({emitter_path})")
+    return True
+
+
 def run_agent(model: str, harness_url: str, task_text: str) -> None:
     client = OpenAI()
     vm = PcmRuntimeClientSync(harness_url)
@@ -929,6 +1057,9 @@ def run_agent(model: str, harness_url: str, task_text: str) -> None:
         return
 
     if _try_capture_date_lookup_fastpath(vm, task_text):
+        return
+
+    if _try_purchase_prefix_fix_fastpath(vm, task_text):
         return
 
     total_prompt_tokens = 0
