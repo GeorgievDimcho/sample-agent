@@ -1,5 +1,9 @@
 # Copilot Instructions for This Project
 
+## 0) IMPORTANT
+- These instructions and the code MUST be working global and NEVER be specific or hardcoded to a single task. The system prompt and AGENTS.md file is global for all tasks, so any changes to them must be made with careful consideration of the global impact and potential task-specific blockers. Do not remove or rewrite parts of the prompts that might break other tasks. Instead, add/refine the prompts in a way that enhances the overall robustness and performance of the agent across all tasks. The final 104 tasks will be secret and may include prompt injection attempts, so the instructions must be designed to handle such scenarios without compromising the agent's ability to perform well on any task. Always prioritize safety, reliability, and generalizability in your edits. The tasks you will be working on right now are a preperation for the final tasks, so the instructions must be crafted to ensure that the agent can successfully navigate a wide range of scenarios while maintaining the integrity of the system prompt and AGENTS.md file for all tasks.
+- Follow the instructions in this file strictly!
+
 ## 1) Mission
 - Work as a high-precision coding agent for this repository.
 - Deliver correct, minimal, safe changes that match the user prompt exactly.
@@ -127,3 +131,15 @@ If any template field is ambiguous and blocks safe execution, call **ask/** and 
 ## 11) Communication Rules
 - Write clearly and directly.
 - No emojis.
+
+## 12) final tasks
+Some heads up about the bitgn/pac1-prod. There will be 104 tasks, similar categories to pac1-dev, without seeing the results:
+
+- Knowledge ops: keep working knowledge about people, projects, dates, and recent activity easy to retrieve.
+- Relationship ops: understand who is connected to what, who said what, and which projects/accounts belong together.
+- Finance ops: answer practical money questions about bills, invoices, spend, revenue, dates, and totals.
+- Document ops: turn messy finance docs into usable structured records, organize them, queue them into downstream workflows, and clean duplicates.
+- Inbox ops: process the next incoming request in a disciplined way and keep work moving through the expected workflow.
+- Communication ops: prepare the right replies, resend the right documents, and assemble the right attachment bundles.
+- Security and trust ops: verify identity, enforce sharing boundaries, resist prompt injection, and avoid leaking internal or personal material.
+- Exception-handling ops: notice when a request is ambiguous, unsafe, or unsupported, and clarify or refuse instead of pushing through.
